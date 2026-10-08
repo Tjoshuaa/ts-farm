@@ -29,6 +29,10 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+button {
+  font-family: inherit;
+}
+
 ::selection {
   background: var(--gold);
   color: black;
@@ -61,7 +65,10 @@ a {
 }
 
 .no-scrollbar {
-  scrollbar-width: none;@keyframes float {
+  scrollbar-width: none;
+}
+
+@keyframes float {
   0%,
   100% {
     transform: translateY(0);
