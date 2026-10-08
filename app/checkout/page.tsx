@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -45,14 +45,9 @@ export default function CheckoutPage() {
 
   const [loading, setLoading] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [orderTotal, setOrderTotal] = useState(0);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (hydrated && items.length === 0 && !orderId) {
-      // Cart is empty. The page below will handle this state.
-    }
-  }, [hydrated, items.length, orderId]);
 
   const copyAccountNumber = async () => {
     try {
@@ -63,7 +58,7 @@ export default function CheckoutPage() {
         setCopied(false);
       }, 2000);
     } catch {
-      // Clipboard may not be available in every browser.
+      setCopied(false);
     }
   };
 
@@ -103,10 +98,10 @@ export default function CheckoutPage() {
 
     try {
       /*
-       * STEP 1:
-       * Create the order.
+       * CREATE ORDER
        *
-       * Payment remains pending because this is manual Opay payment.
+       * Payment remains pending because payment will be made manually
+       * through Opay.
        */
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -124,19 +119,22 @@ export default function CheckoutPage() {
         .single();
 
       if (orderError) {
-        console.error("Order error:", orderError);
+        console.error("Order creation error:", orderError);
         throw new Error(
           orderError.message || "Unable to create your order."
         );
       }
 
       /*
-       * STEP 2:
-       * Save every cart item against the order.
+       * SAVE ORDER ITEMS
+       *
+       * IMPORTANT:
+       * We intentionally do NOT send product_id here because the
+       * current order_items.product_id column is UUID while the
+       * products currently use numeric IDs such as 1, 2, 3, 4.
        */
       const orderItems = items.map((item) => ({
         order_id: order.id,
-        product_id: item.id,
         product_name: item.name,
         quantity: item.quantity,
         price: item.price,
@@ -149,7 +147,10 @@ export default function CheckoutPage() {
       if (itemsError) {
         console.error("Order items error:", itemsError);
 
-        // Try to remove the order if its items could not be saved.
+        /*
+         * If order items fail, remove the order that was just created
+         * so we don't leave an incomplete order behind.
+         */
         await supabase.from("orders").delete().eq("id", order.id);
 
         throw new Error(
@@ -158,18 +159,17 @@ export default function CheckoutPage() {
       }
 
       /*
-       * STEP 3:
-       * Clear the customer's cart.
+       * Clear cart after both database operations succeed.
        */
       clearCart();
 
       /*
-       * STEP 4:
-       * Show the manual payment instructions.
+       * Save the order information for the payment screen.
        */
       setOrderId(order.id);
+      setOrderTotal(subtotal);
     } catch (err) {
-      console.error(err);
+      console.error("Checkout error:", err);
 
       if (err instanceof Error) {
         setError(err.message);
@@ -184,19 +184,19 @@ export default function CheckoutPage() {
   const whatsappMessage = orderId
     ? `Hello T's Farm,
 
-I have placed an order and made/I'm about to make the manual Opay payment.
+I have placed an order and made the manual Opay payment.
 
 Order ID: ${orderId}
 Customer Name: ${customerName}
 Phone: ${customerPhone}
-Total Amount: ${formatPrice(subtotal)}
+Total Amount: ${formatPrice(orderTotal)}
 
 Payment Account:
 Bank: Opay
 Account Number: 9169534809
 Account Name: Thompson Ayibapreye Joshua
 
-Please confirm my payment and order.
+I am sending my payment confirmation for verification.
 
 Thank you.`
     : "";
@@ -205,16 +205,19 @@ Thank you.`
     whatsappMessage
   )}`;
 
+  /*
+   * LOADING STATE
+   */
   if (!hydrated) {
     return (
-      <main className="min-h-screen bg-[#07130d] text-white flex items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-[#07130d] text-white">
         <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
       </main>
     );
   }
 
   /*
-   * SUCCESS / MANUAL PAYMENT SCREEN
+   * PAYMENT INSTRUCTIONS / SUCCESS SCREEN
    */
   if (orderId) {
     return (
@@ -231,7 +234,7 @@ Thank you.`
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl">
-            {/* Success header */}
+            {/* Header */}
             <div className="border-b border-white/10 px-6 py-10 text-center sm:px-10">
               <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15">
                 <CheckCircle2 className="h-11 w-11 text-emerald-400" />
@@ -246,13 +249,15 @@ Thank you.`
               </h1>
 
               <p className="mx-auto mt-4 max-w-xl text-gray-400">
-                Your order has been received successfully. Please transfer
-                the exact order amount to our Opay account below.
+                Your order has been received. Please transfer the exact
+                amount below to our Opay account.
               </p>
 
               <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-gray-300">
                 Order ID:
-                <span className="font-semibold text-white">{orderId}</span>
+                <span className="font-semibold text-white">
+                  {orderId}
+                </span>
               </div>
             </div>
 
@@ -262,7 +267,7 @@ Thank you.`
                 <p className="text-sm text-gray-400">Amount to Pay</p>
 
                 <p className="mt-2 text-4xl font-black text-amber-400">
-                  {formatPrice(subtotal)}
+                  {formatPrice(orderTotal)}
                 </p>
 
                 <p className="mt-2 text-xs text-gray-500">
@@ -282,17 +287,19 @@ Thank you.`
                     <h2 className="font-bold text-white">
                       Manual Opay Payment
                     </h2>
+
                     <p className="text-sm text-gray-400">
                       Transfer the amount to this account
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
                   <div>
                     <p className="text-xs uppercase tracking-wider text-gray-500">
                       Bank
                     </p>
+
                     <p className="mt-1 text-lg font-semibold text-white">
                       Opay
                     </p>
@@ -302,6 +309,7 @@ Thank you.`
                     <p className="text-xs uppercase tracking-wider text-gray-500">
                       Account Name
                     </p>
+
                     <p className="mt-1 text-lg font-semibold text-white">
                       Thompson Ayibapreye Joshua
                     </p>
@@ -323,6 +331,7 @@ Thank you.`
                         className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/10 hover:text-white"
                       >
                         <Copy className="h-4 w-4" />
+
                         {copied ? "Copied" : "Copy"}
                       </button>
                     </div>
@@ -341,10 +350,11 @@ Thank you.`
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
                       1
                     </span>
+
                     <span>
                       Transfer{" "}
                       <strong className="text-white">
-                        {formatPrice(subtotal)}
+                        {formatPrice(orderTotal)}
                       </strong>{" "}
                       to the Opay account above.
                     </span>
@@ -354,8 +364,9 @@ Thank you.`
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
                       2
                     </span>
+
                     <span>
-                      Keep your transfer receipt or transaction
+                      Keep your Opay transfer receipt or transaction
                       confirmation.
                     </span>
                   </li>
@@ -364,6 +375,7 @@ Thank you.`
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
                       3
                     </span>
+
                     <span>
                       Click the WhatsApp button below and send your
                       payment confirmation to T&apos;s Farm.
@@ -374,6 +386,7 @@ Thank you.`
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
                       4
                     </span>
+
                     <span>
                       T&apos;s Farm will verify your payment and begin
                       processing your order.
@@ -420,11 +433,13 @@ Thank you.`
               <ShoppingBag className="h-9 w-9 text-amber-400" />
             </div>
 
-            <h1 className="text-3xl font-bold">Your cart is empty</h1>
+            <h1 className="text-3xl font-bold">
+              Your cart is empty
+            </h1>
 
             <p className="mx-auto mt-3 max-w-md text-gray-400">
-              Add some fresh products from T&apos;s Farm before proceeding
-              to checkout.
+              Add some fresh products from T&apos;s Farm before
+              proceeding to checkout.
             </p>
 
             <Link
@@ -440,6 +455,9 @@ Thank you.`
     );
   }
 
+  /*
+   * CHECKOUT FORM
+   */
   return (
     <main className="min-h-screen bg-[#07130d] text-white">
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
@@ -480,12 +498,14 @@ Thank you.`
                 <h2 className="text-xl font-bold">
                   Customer Information
                 </h2>
+
                 <p className="mt-1 text-sm text-gray-500">
                   Tell us where to deliver your order.
                 </p>
               </div>
 
               <div className="space-y-5">
+                {/* Name */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-300">
                     Full Name
@@ -494,13 +514,16 @@ Thank you.`
                   <input
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) =>
+                      setCustomerName(e.target.value)
+                    }
                     placeholder="Enter your full name"
                     className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
                     required
                   />
                 </div>
 
+                {/* Phone */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-300">
                     Phone Number
@@ -509,13 +532,16 @@ Thank you.`
                   <input
                     type="tel"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    onChange={(e) =>
+                      setCustomerPhone(e.target.value)
+                    }
                     placeholder="e.g. 08012345678"
                     className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
                     required
                   />
                 </div>
 
+                {/* Email */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-300">
                     Email Address
@@ -524,13 +550,16 @@ Thank you.`
                   <input
                     type="email"
                     value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    onChange={(e) =>
+                      setCustomerEmail(e.target.value)
+                    }
                     placeholder="you@example.com"
-                    className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600"
                     required
                   />
                 </div>
 
+                {/* Address */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-300">
                     Delivery Address
@@ -538,7 +567,9 @@ Thank you.`
 
                   <textarea
                     value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    onChange={(e) =>
+                      setDeliveryAddress(e.target.value)
+                    }
                     placeholder="Enter your full delivery address"
                     rows={4}
                     className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
@@ -546,15 +577,20 @@ Thank you.`
                   />
                 </div>
 
+                {/* Notes */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-300">
                     Delivery Notes{" "}
-                    <span className="text-gray-600">(Optional)</span>
+                    <span className="text-gray-600">
+                      (Optional)
+                    </span>
                   </label>
 
                   <textarea
                     value={deliveryNotes}
-                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    onChange={(e) =>
+                      setDeliveryNotes(e.target.value)
+                    }
                     placeholder="Any special delivery instructions?"
                     rows={3}
                     className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
@@ -566,10 +602,13 @@ Thank you.`
             {/* Order summary */}
             <aside className="h-fit rounded-3xl border border-white/10 bg-white/[0.04] p-6 sm:p-8">
               <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-xl font-bold">Your Order</h2>
+                <h2 className="text-xl font-bold">
+                  Your Order
+                </h2>
 
                 <span className="rounded-full bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-400">
-                  {items.length} item{items.length !== 1 ? "s" : ""}
+                  {items.length} item
+                  {items.length !== 1 ? "s" : ""}
                 </span>
               </div>
 
@@ -616,7 +655,9 @@ Thank you.`
 
                           <button
                             type="button"
-                            onClick={() => removeItem(item.id)}
+                            onClick={() =>
+                              removeItem(item.id)
+                            }
                             className="ml-2 flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-red-500/10 hover:text-red-400"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -625,13 +666,16 @@ Thank you.`
                       </div>
 
                       <p className="font-bold text-amber-400">
-                        {formatPrice(item.price * item.quantity)}
+                        {formatPrice(
+                          item.price * item.quantity
+                        )}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
 
+              {/* Totals */}
               <div className="mt-6 space-y-3">
                 <div className="flex items-center justify-between text-sm text-gray-400">
                   <span>Subtotal</span>
@@ -646,7 +690,9 @@ Thank you.`
                 <div className="my-4 h-px bg-white/10" />
 
                 <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold">Total</span>
+                  <span className="text-lg font-bold">
+                    Total
+                  </span>
 
                   <span className="text-2xl font-black text-amber-400">
                     {formatPrice(subtotal)}
@@ -654,6 +700,7 @@ Thank you.`
                 </div>
               </div>
 
+              {/* Submit */}
               <button
                 type="submit"
                 disabled={loading}
@@ -673,8 +720,8 @@ Thank you.`
               </button>
 
               <p className="mt-4 text-center text-xs leading-5 text-gray-600">
-                Your order will be saved first. You will then receive
-                the Opay payment instructions.
+                Your order will be saved first. You will then
+                receive the Opay payment instructions.
               </p>
             </aside>
           </div>
