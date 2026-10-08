@@ -14,7 +14,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 type Product = {
   id: string;
@@ -104,7 +109,7 @@ const defaultProducts: Product[] = [
 
 const galleryImages = [
   {
-    src: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?auto=format&fit=crop&w=1200&q=80",
+    src: "https://images.unsplash.com/photo-1500595046743-cd271d694d30?auto=format&fit=crop&w=1200&q=80",
     title: "Life on the Farm",
   },
   {
@@ -161,33 +166,40 @@ export default function Home() {
 
   useEffect(() => {
     async function loadProducts() {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("created_at", { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .order("created_at", { ascending: true });
 
-      if (error) {
-        console.error("Error loading products:", error);
-        setLoadingProducts(false);
-        return;
-      }
+        if (error) {
+          console.error("Error loading products:", error);
+          setLoadingProducts(false);
+          return;
+        }
 
-      if (data && data.length > 0) {
-        const formattedProducts: Product[] = data.map((product) => ({
-          id: product.id,
-          name: product.name,
-          price: Number(product.price) || 0,
-          unit: getProductUnit(product.category, product.coming_soon),
-          description:
-            product.description ||
-            "Fresh quality farm produce from T's Farm.",
-          emoji: getProductEmoji(product.category),
-          category: product.category,
-          available: product.available,
-          comingSoon: product.coming_soon,
-        }));
+        if (data && data.length > 0) {
+          const formattedProducts: Product[] = data.map((product) => ({
+            id: product.id,
+            name: product.name,
+            price: Number(product.price) || 0,
+            unit: getProductUnit(
+              product.category,
+              product.coming_soon
+            ),
+            description:
+              product.description ||
+              "Fresh quality farm produce from T's Farm.",
+            emoji: getProductEmoji(product.category),
+            category: product.category,
+            available: product.available,
+            comingSoon: product.coming_soon,
+          }));
 
-        setProducts(formattedProducts);
+          setProducts(formattedProducts);
+        }
+      } catch (error) {
+        console.error("Supabase connection error:", error);
       }
 
       setLoadingProducts(false);
@@ -381,7 +393,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* TRUST STRIP */}
+      {/* TRUST */}
       <section className="border-y border-white/10 bg-[#0b1c13]">
         <div className="mx-auto grid max-w-7xl grid-cols-1 divide-y divide-white/10 px-5 py-7 sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:px-8">
           <div className="flex items-center justify-center gap-4 py-4 sm:py-0">
@@ -419,26 +431,18 @@ export default function Home() {
       {/* SHOP */}
       <section id="shop" className="px-5 py-24 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-14 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-            <div>
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
-                Our Products
-              </p>
-              <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">
-                Fresh From T&apos;s Farm
-              </h2>
-              <p className="mt-4 max-w-2xl text-white/50">
-                Choose from our selection of fresh farm produce.
-              </p>
-            </div>
+          <div className="mb-14">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.25em] text-[#d4af37]">
+              Our Products
+            </p>
 
-            <Link
-              href="#shop"
-              className="hidden items-center gap-2 text-sm font-semibold text-[#d4af37] md:flex"
-            >
-              View Products
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+            <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">
+              Fresh From T&apos;s Farm
+            </h2>
+
+            <p className="mt-4 max-w-2xl text-white/50">
+              Choose from our selection of fresh farm produce.
+            </p>
           </div>
 
           {loadingProducts ? (
@@ -455,11 +459,9 @@ export default function Home() {
               {products.map((product) => (
                 <article
                   key={product.id}
-                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] transition duration-300 hover:-translate-y-1 hover:border-[#d4af37]/30 hover:bg-white/[0.055]"
+                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] transition duration-300 hover:-translate-y-1 hover:border-[#d4af37]/30"
                 >
                   <div className="relative flex h-52 items-center justify-center overflow-hidden bg-gradient-to-br from-[#0e2a1b] to-[#07130d]">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(212,175,55,0.12),transparent_55%)]" />
-
                     <span className="relative text-8xl transition duration-500 group-hover:scale-110">
                       {product.emoji}
                     </span>
@@ -472,19 +474,13 @@ export default function Home() {
                   </div>
 
                   <div className="p-6">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="mb-1 text-xs uppercase tracking-wider text-[#d4af37]">
-                          {product.category}
-                        </p>
+                    <p className="mb-1 text-xs uppercase tracking-wider text-[#d4af37]">
+                      {product.category}
+                    </p>
 
-                        <h3 className="text-xl font-bold">
-                          {product.name}
-                        </h3>
-                      </div>
-                    </div>
+                    <h3 className="text-xl font-bold">{product.name}</h3>
 
-                    <p className="min-h-[48px] text-sm leading-6 text-white/50">
+                    <p className="mt-3 min-h-[48px] text-sm leading-6 text-white/50">
                       {product.description}
                     </p>
 
@@ -552,7 +548,9 @@ export default function Home() {
               <div
                 key={`${image.title}-${index}`}
                 className={`group relative overflow-hidden rounded-3xl ${
-                  index === 0 ? "sm:row-span-2 sm:min-h-[500px]" : "min-h-[240px]"
+                  index === 0
+                    ? "sm:row-span-2 sm:min-h-[500px]"
+                    : "min-h-[240px]"
                 }`}
               >
                 <Image
@@ -583,7 +581,9 @@ export default function Home() {
 
             <h2 className="text-4xl font-bold leading-tight sm:text-5xl">
               Raising Quality.
-              <span className="block text-[#d4af37]">Delivering Freshness.</span>
+              <span className="block text-[#d4af37]">
+                Delivering Freshness.
+              </span>
             </h2>
 
             <p className="mt-7 text-lg leading-8 text-white/60">
@@ -597,22 +597,6 @@ export default function Home() {
               our animals and select our produce so that you can enjoy fresh
               and reliable food.
             </p>
-
-            <div className="mt-8 grid grid-cols-2 gap-5">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-3xl font-bold text-[#d4af37]">100%</p>
-                <p className="mt-1 text-sm text-white/50">
-                  Farm Fresh Produce
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-3xl font-bold text-[#d4af37]">Fresh</p>
-                <p className="mt-1 text-sm text-white/50">
-                  Quality Focused
-                </p>
-              </div>
-            </div>
           </div>
 
           <div className="relative overflow-hidden rounded-[2rem] border border-white/10">
@@ -623,17 +607,13 @@ export default function Home() {
                 fill
                 className="object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
             </div>
           </div>
         </div>
       </section>
 
       {/* CONTACT */}
-      <section
-        id="contact"
-        className="px-5 pb-24 pt-10 lg:px-8"
-      >
+      <section id="contact" className="px-5 pb-24 pt-10 lg:px-8">
         <div className="mx-auto max-w-7xl overflow-hidden rounded-[2rem] border border-[#d4af37]/20 bg-gradient-to-br from-[#12321f] to-[#07130d]">
           <div className="grid items-center gap-10 p-8 sm:p-12 lg:grid-cols-2 lg:p-16">
             <div>
@@ -695,31 +675,17 @@ export default function Home() {
                 </p>
               </div>
             </div>
-
-            <p className="mt-5 max-w-sm text-sm leading-6 text-white/40">
-              Premium farm-fresh produce from our farm to your table.
-            </p>
           </div>
 
           <div>
             <h3 className="mb-4 font-semibold">Quick Links</h3>
 
             <div className="flex flex-col gap-3 text-sm text-white/50">
-              <Link href="#home" className="hover:text-[#d4af37]">
-                Home
-              </Link>
-              <Link href="#shop" className="hover:text-[#d4af37]">
-                Shop
-              </Link>
-              <Link href="#gallery" className="hover:text-[#d4af37]">
-                Gallery
-              </Link>
-              <Link href="#about" className="hover:text-[#d4af37]">
-                About
-              </Link>
-              <Link href="#contact" className="hover:text-[#d4af37]">
-                Contact
-              </Link>
+              <Link href="#home">Home</Link>
+              <Link href="#shop">Shop</Link>
+              <Link href="#gallery">Gallery</Link>
+              <Link href="#about">About</Link>
+              <Link href="#contact">Contact</Link>
             </div>
           </div>
 
@@ -733,7 +699,7 @@ export default function Home() {
                 href="https://wa.me/2349169534809"
                 target="_blank"
                 rel="noreferrer"
-                className="block transition hover:text-[#d4af37]"
+                className="block hover:text-[#d4af37]"
               >
                 WhatsApp: 09169534809
               </a>
@@ -742,7 +708,7 @@ export default function Home() {
                 href="https://www.tiktok.com/@tsfarm26"
                 target="_blank"
                 rel="noreferrer"
-                className="block transition hover:text-[#d4af37]"
+                className="block hover:text-[#d4af37]"
               >
                 TikTok: @tsfarm26
               </a>
@@ -755,12 +721,12 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* FLOATING WHATSAPP */}
+      {/* WHATSAPP */}
       <a
         href="https://wa.me/2349169534809"
         target="_blank"
         rel="noreferrer"
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-2xl shadow-black/30 transition hover:scale-110"
+        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-2xl transition hover:scale-110"
         aria-label="Contact T's Farm on WhatsApp"
       >
         <MessageCircle className="h-7 w-7" />
