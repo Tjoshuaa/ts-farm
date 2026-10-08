@@ -1,33 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
-  ChevronRight,
+  Copy,
   Loader2,
-  MapPin,
+  MessageCircle,
   Minus,
-  Phone,
   Plus,
   ShoppingBag,
   Trash2,
-  User,
-  Mail,
-  MessageCircle,
+  Wallet,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { useCart } from "../context/CartContext";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 function formatPrice(price: number) {
   return `\u20A6${price.toLocaleString("en-NG")}`;
@@ -37,7 +30,6 @@ export default function CheckoutPage() {
   const {
     items,
     subtotal,
-    cartCount,
     increaseQuantity,
     decreaseQuantity,
     removeItem,
@@ -51,254 +43,96 @@ export default function CheckoutPage() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
 
-  const [isSubmitting, setIsSubmitting] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  useEffect(() => {
+    if (hydrated && items.length === 0 && !orderId) {
+      // Cart is empty. The page below will handle this state.
+    }
+  }, [hydrated, items.length, orderId]);
 
-  const [successOrderId, setSuccessOrderId] =
-    useState<string | null>(null);
+  const copyAccountNumber = async () => {
+    try {
+      await navigator.clipboard.writeText("9169534809");
+      setCopied(true);
 
-  /*
-   * The checkout page is not ready until the browser
-   * has loaded the customer's saved cart.
-   */
-  if (!hydrated) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#07140d] text-white">
-        <div className="text-center">
-          <Loader2
-            className="mx-auto animate-spin text-[#d6b45a]"
-            size={32}
-          />
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      // Clipboard may not be available in every browser.
+    }
+  };
 
-          <p className="mt-4 text-sm text-white/50">
-            Loading your cart...
-          </p>
-        </div>
-      </main>
-    );
-  }
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  /*
-   * Empty-cart protection.
-   */
-  if (items.length === 0 && !successOrderId) {
-    return (
-      <main className="min-h-screen bg-[#07140d] text-white">
-        <header className="border-b border-white/10 bg-[#07140d]/95">
-          <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <Link
-              href="/"
-              className="text-lg font-bold tracking-wide text-[#d6b45a]"
-            >
-              T&apos;S FARM
-            </Link>
+    if (loading) return;
 
-            <Link
-              href="/cart"
-              className="text-sm text-white/60 transition hover:text-[#d6b45a]"
-            >
-              Back to Cart
-            </Link>
-          </div>
-        </header>
+    setError("");
 
-        <section className="flex min-h-[calc(100vh-80px)] items-center justify-center px-4 py-20">
-          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0b1c12] p-8 text-center shadow-2xl sm:p-12">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#d6b45a]/10 text-[#d6b45a]">
-              <ShoppingBag size={34} />
-            </div>
+    if (!customerName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
 
-            <h1 className="mt-7 text-3xl font-bold">
-              Your cart is empty
-            </h1>
+    if (!customerPhone.trim()) {
+      setError("Please enter your phone number.");
+      return;
+    }
 
-            <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-white/50">
-              Add some fresh farm produce to your cart
-              before proceeding to checkout.
-            </p>
+    if (!customerEmail.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
 
-            <Link
-              href="/#shop"
-              className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-[#d6b45a] px-7 py-4 text-sm font-bold text-[#07140d] transition hover:bg-[#e5c874]"
-            >
-              Continue Shopping
-              <ChevronRight size={17} />
-            </Link>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  /*
-   * Successful order screen.
-   */
-  if (successOrderId) {
-    const whatsappMessage = encodeURIComponent(
-      `Hello T's Farm, I have just placed an order.\n\nOrder ID: ${successOrderId}\n\nPlease confirm my order.`
-    );
-
-    return (
-      <main className="min-h-screen bg-[#07140d] text-white">
-        <header className="border-b border-white/10 bg-[#07140d]/95">
-          <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <Link
-              href="/"
-              className="text-lg font-bold tracking-wide text-[#d6b45a]"
-            >
-              T&apos;S FARM
-            </Link>
-          </div>
-        </header>
-
-        <section className="flex min-h-[calc(100vh-80px)] items-center justify-center px-4 py-20">
-          <div className="w-full max-w-2xl rounded-3xl border border-[#d6b45a]/20 bg-[#0b1c12] p-8 text-center shadow-2xl sm:p-12">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 text-green-400">
-              <CheckCircle2 size={42} />
-            </div>
-
-            <p className="mt-7 text-xs font-semibold uppercase tracking-[0.3em] text-[#d6b45a]">
-              ORDER RECEIVED
-            </p>
-
-            <h1 className="mt-3 text-3xl font-bold sm:text-4xl">
-              Thank you for your order!
-            </h1>
-
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/50">
-              Your order has been successfully submitted to
-              T&apos;s Farm. We will contact you using the phone
-              number provided to confirm your order and
-              delivery details.
-            </p>
-
-            <div className="mt-8 rounded-2xl border border-white/10 bg-[#07140d] p-5">
-              <p className="text-xs uppercase tracking-wider text-white/40">
-                Order ID
-              </p>
-
-              <p className="mt-2 break-all font-mono text-sm text-[#d6b45a]">
-                {successOrderId}
-              </p>
-            </div>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <a
-                href={`https://wa.me/2349169534809?text=${whatsappMessage}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-7 py-4 text-sm font-bold text-white transition hover:brightness-110"
-              >
-                <MessageCircle size={18} />
-                Confirm on WhatsApp
-              </a>
-
-              <Link
-                href="/#shop"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-7 py-4 text-sm font-semibold transition hover:border-[#d6b45a]/50 hover:bg-white/5"
-              >
-                Continue Shopping
-              </Link>
-            </div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    setErrorMessage("");
+    if (!deliveryAddress.trim()) {
+      setError("Please enter your delivery address.");
+      return;
+    }
 
     if (items.length === 0) {
-      setErrorMessage(
-        "Your cart is empty. Please add a product before placing an order."
-      );
+      setError("Your cart is empty.");
       return;
     }
 
-    const trimmedName = customerName.trim();
-    const trimmedPhone = customerPhone.trim();
-    const trimmedEmail = customerEmail.trim();
-    const trimmedAddress = deliveryAddress.trim();
-
-    if (!trimmedName) {
-      setErrorMessage("Please enter your full name.");
-      return;
-    }
-
-    if (!trimmedPhone) {
-      setErrorMessage("Please enter your phone number.");
-      return;
-    }
-
-    if (!trimmedEmail) {
-      setErrorMessage("Please enter your email address.");
-      return;
-    }
-
-    if (!trimmedAddress) {
-      setErrorMessage(
-        "Please enter your delivery address."
-      );
-      return;
-    }
-
-    if (subtotal <= 0) {
-      setErrorMessage(
-        "Your cart total must be greater than zero."
-      );
-      return;
-    }
-
-    setIsSubmitting(true);
+    setLoading(true);
 
     try {
       /*
-       * Create the main order.
+       * STEP 1:
+       * Create the order.
+       *
+       * Payment remains pending because this is manual Opay payment.
        */
-      const { data: order, error: orderError } =
-        await supabase
-          .from("orders")
-          .insert({
-            customer_name: trimmedName,
-            customer_phone: trimmedPhone,
-            customer_email: trimmedEmail,
-            delivery_address: trimmedAddress,
-            total_amount: subtotal,
-            payment_status: "pending",
-            order_status: "pending",
-            payment_reference: null,
-          })
-          .select("id")
-          .single();
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          customer_name: customerName.trim(),
+          customer_phone: customerPhone.trim(),
+          customer_email: customerEmail.trim(),
+          delivery_address: deliveryAddress.trim(),
+          total_amount: subtotal,
+          payment_status: "pending",
+          order_status: "pending",
+          payment_reference: null,
+        })
+        .select()
+        .single();
 
       if (orderError) {
-        console.error(
-          "Order creation error:",
-          orderError
-        );
-
+        console.error("Order error:", orderError);
         throw new Error(
-          orderError.message ||
-            "We could not create your order."
-        );
-      }
-
-      if (!order?.id) {
-        throw new Error(
-          "The order was created but no order ID was returned."
+          orderError.message || "Unable to create your order."
         );
       }
 
       /*
-       * Create the order items.
+       * STEP 2:
+       * Save every cart item against the order.
        */
       const orderItems = items.map((item) => ({
         order_id: order.id,
@@ -308,537 +142,544 @@ export default function CheckoutPage() {
         price: item.price,
       }));
 
-      const { error: itemsError } =
-        await supabase
-          .from("order_items")
-          .insert(orderItems);
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(orderItems);
 
       if (itemsError) {
-        console.error(
-          "Order items creation error:",
-          itemsError
-        );
+        console.error("Order items error:", itemsError);
 
-        /*
-         * The main order already exists, so tell the customer
-         * exactly what happened rather than pretending the order
-         * was successful.
-         */
+        // Try to remove the order if its items could not be saved.
+        await supabase.from("orders").delete().eq("id", order.id);
+
         throw new Error(
-          itemsError.message ||
-            "The order was created but the order items could not be saved."
+          itemsError.message || "Unable to save your order items."
         );
       }
 
       /*
-       * The complete order is now safely stored.
-       *
-       * Clear the customer's local cart only after BOTH
-       * database operations succeeded.
+       * STEP 3:
+       * Clear the customer's cart.
        */
       clearCart();
 
-      setSuccessOrderId(String(order.id));
-    } catch (error) {
-      console.error(
-        "Checkout submission failed:",
-        error
-      );
+      /*
+       * STEP 4:
+       * Show the manual payment instructions.
+       */
+      setOrderId(order.id);
+    } catch (err) {
+      console.error(err);
 
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while placing your order.";
-
-      setErrorMessage(message);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Something went wrong while placing your order.");
+      }
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
+  };
+
+  const whatsappMessage = orderId
+    ? `Hello T's Farm,
+
+I have placed an order and made/I'm about to make the manual Opay payment.
+
+Order ID: ${orderId}
+Customer Name: ${customerName}
+Phone: ${customerPhone}
+Total Amount: ${formatPrice(subtotal)}
+
+Payment Account:
+Bank: Opay
+Account Number: 9169534809
+Account Name: Thompson Ayibapreye Joshua
+
+Please confirm my payment and order.
+
+Thank you.`
+    : "";
+
+  const whatsappLink = `https://wa.me/2349169534809?text=${encodeURIComponent(
+    whatsappMessage
+  )}`;
+
+  if (!hydrated) {
+    return (
+      <main className="min-h-screen bg-[#07130d] text-white flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
+      </main>
+    );
   }
 
-  return (
-    <main className="min-h-screen bg-[#07140d] text-white">
-      {/* HEADER */}
-      <header className="border-b border-white/10 bg-[#07140d]/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link
-            href="/"
-            className="flex items-center gap-3"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d6b45a]/30 bg-[#d6b45a]/10 text-[#d6b45a]">
-              <ShoppingBag size={18} />
-            </div>
-
-            <div>
-              <p className="font-bold tracking-wide text-[#d6b45a]">
-                T&apos;S FARM
-              </p>
-
-              <p className="text-[9px] uppercase tracking-[0.2em] text-white/40">
-                Checkout
-              </p>
-            </div>
-          </Link>
-
-          <Link
-            href="/cart"
-            className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-[#d6b45a]"
-          >
-            <ArrowLeft size={16} />
-            Back to Cart
-          </Link>
-        </div>
-      </header>
-
-      {/* PAGE */}
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
-        {/* PAGE TITLE */}
-        <div className="mb-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#d6b45a]">
-            T&apos;S FARM
-          </p>
-
-          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
-            Checkout
-          </h1>
-
-          <p className="mt-3 text-sm text-white/50">
-            Enter your details below to place your farm
-            produce order.
-          </p>
-        </div>
-
-        {/* ERROR */}
-        {errorMessage && (
-          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <p className="text-sm font-medium text-red-300">
-              {errorMessage}
-            </p>
-          </div>
-        )}
-
-        <form
-          onSubmit={handleSubmit}
-          className="grid gap-8 lg:grid-cols-[1fr_420px]"
-        >
-          {/* CUSTOMER DETAILS */}
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-white/10 bg-[#0b1c12] p-6 sm:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#d6b45a]/10 text-[#d6b45a]">
-                  <User size={19} />
-                </div>
-
-                <div>
-                  <h2 className="text-xl font-bold">
-                    Customer Details
-                  </h2>
-
-                  <p className="mt-1 text-xs text-white/40">
-                    Tell us how we can reach you.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-7 grid gap-5 sm:grid-cols-2">
-                {/* NAME */}
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor="customerName"
-                    className="mb-2 block text-xs font-semibold text-white/70"
-                  >
-                    Full Name
-                  </label>
-
-                  <div className="relative">
-                    <User
-                      size={17}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
-                    />
-
-                    <input
-                      id="customerName"
-                      type="text"
-                      value={customerName}
-                      onChange={(event) =>
-                        setCustomerName(
-                          event.target.value
-                        )
-                      }
-                      placeholder="Enter your full name"
-                      autoComplete="name"
-                      className="w-full rounded-xl border border-white/10 bg-[#07140d] py-4 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6b45a]/60"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* PHONE */}
-                <div>
-                  <label
-                    htmlFor="customerPhone"
-                    className="mb-2 block text-xs font-semibold text-white/70"
-                  >
-                    Phone Number
-                  </label>
-
-                  <div className="relative">
-                    <Phone
-                      size={17}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
-                    />
-
-                    <input
-                      id="customerPhone"
-                      type="tel"
-                      value={customerPhone}
-                      onChange={(event) =>
-                        setCustomerPhone(
-                          event.target.value
-                        )
-                      }
-                      placeholder="08012345678"
-                      autoComplete="tel"
-                      className="w-full rounded-xl border border-white/10 bg-[#07140d] py-4 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6b45a]/60"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* EMAIL */}
-                <div>
-                  <label
-                    htmlFor="customerEmail"
-                    className="mb-2 block text-xs font-semibold text-white/70"
-                  >
-                    Email Address
-                  </label>
-
-                  <div className="relative">
-                    <Mail
-                      size={17}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
-                    />
-
-                    <input
-                      id="customerEmail"
-                      type="email"
-                      value={customerEmail}
-                      onChange={(event) =>
-                        setCustomerEmail(
-                          event.target.value
-                        )
-                      }
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      className="w-full rounded-xl border border-white/10 bg-[#07140d] py-4 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6b45a]/60"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* ADDRESS */}
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor="deliveryAddress"
-                    className="mb-2 block text-xs font-semibold text-white/70"
-                  >
-                    Delivery Address
-                  </label>
-
-                  <div className="relative">
-                    <MapPin
-                      size={17}
-                      className="absolute left-4 top-5 text-white/30"
-                    />
-
-                    <textarea
-                      id="deliveryAddress"
-                      value={deliveryAddress}
-                      onChange={(event) =>
-                        setDeliveryAddress(
-                          event.target.value
-                        )
-                      }
-                      placeholder="Enter your complete delivery address"
-                      autoComplete="street-address"
-                      rows={4}
-                      className="w-full resize-none rounded-xl border border-white/10 bg-[#07140d] py-4 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6b45a]/60"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* NOTES */}
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor="deliveryNotes"
-                    className="mb-2 block text-xs font-semibold text-white/70"
-                  >
-                    Delivery Notes
-                    <span className="ml-2 font-normal text-white/30">
-                      Optional
-                    </span>
-                  </label>
-
-                  <textarea
-                    id="deliveryNotes"
-                    value={deliveryNotes}
-                    onChange={(event) =>
-                      setDeliveryNotes(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Any directions or additional information for your delivery?"
-                    rows={3}
-                    className="w-full resize-none rounded-xl border border-white/10 bg-[#07140d] p-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#d6b45a]/60"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* DELIVERY NOTICE */}
-            <div className="rounded-2xl border border-[#d6b45a]/20 bg-[#d6b45a]/5 p-5">
-              <div className="flex gap-3">
-                <TruckIcon />
-
-                <div>
-                  <p className="text-sm font-semibold text-[#d6b45a]">
-                    Delivery Information
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-white/50">
-                    Our team will contact you after your order
-                    is received to confirm delivery details
-                    and any applicable delivery charges.
-                  </p>
-                </div>
-              </div>
-            </div>
+  /*
+   * SUCCESS / MANUAL PAYMENT SCREEN
+   */
+  if (orderId) {
+    return (
+      <main className="min-h-screen bg-[#07130d] text-white">
+        <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-gray-300 transition hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to T&apos;s Farm
+            </Link>
           </div>
 
-          {/* ORDER SUMMARY */}
-          <aside className="lg:sticky lg:top-28 lg:self-start">
-            <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#0b1c12]">
-              <div className="border-b border-white/10 p-6">
-                <div className="flex items-center justify-between">
+          <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl">
+            {/* Success header */}
+            <div className="border-b border-white/10 px-6 py-10 text-center sm:px-10">
+              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15">
+                <CheckCircle2 className="h-11 w-11 text-emerald-400" />
+              </div>
+
+              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.25em] text-emerald-400">
+                Order Received
+              </p>
+
+              <h1 className="text-3xl font-bold sm:text-4xl">
+                Complete Your Payment
+              </h1>
+
+              <p className="mx-auto mt-4 max-w-xl text-gray-400">
+                Your order has been received successfully. Please transfer
+                the exact order amount to our Opay account below.
+              </p>
+
+              <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-gray-300">
+                Order ID:
+                <span className="font-semibold text-white">{orderId}</span>
+              </div>
+            </div>
+
+            <div className="space-y-6 p-6 sm:p-10">
+              {/* Amount */}
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6 text-center">
+                <p className="text-sm text-gray-400">Amount to Pay</p>
+
+                <p className="mt-2 text-4xl font-black text-amber-400">
+                  {formatPrice(subtotal)}
+                </p>
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Delivery charges, where applicable, may be confirmed
+                  separately.
+                </p>
+              </div>
+
+              {/* Opay details */}
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10">
+                    <Wallet className="h-5 w-5 text-emerald-400" />
+                  </div>
+
                   <div>
-                    <h2 className="text-xl font-bold">
-                      Your Order
+                    <h2 className="font-bold text-white">
+                      Manual Opay Payment
                     </h2>
+                    <p className="text-sm text-gray-400">
+                      Transfer the amount to this account
+                    </p>
+                  </div>
+                </div>
 
-                    <p className="mt-1 text-xs text-white/40">
-                      {cartCount}{" "}
-                      {cartCount === 1
-                        ? "item"
-                        : "items"}{" "}
-                      in cart
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-gray-500">
+                      Bank
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-white">
+                      Opay
                     </p>
                   </div>
 
-                  <ShoppingBag
-                    size={20}
-                    className="text-[#d6b45a]"
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-gray-500">
+                      Account Name
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-white">
+                      Thompson Ayibapreye Joshua
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-gray-500">
+                      Account Number
+                    </p>
+
+                    <div className="mt-1 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                      <span className="text-2xl font-black tracking-widest text-amber-400">
+                        9169534809
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={copyAccountNumber}
+                        className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/10 hover:text-white"
+                      >
+                        <Copy className="h-4 w-4" />
+                        {copied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+                <h2 className="mb-4 text-lg font-bold">
+                  What to do next
+                </h2>
+
+                <ol className="space-y-4 text-sm text-gray-300">
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
+                      1
+                    </span>
+                    <span>
+                      Transfer{" "}
+                      <strong className="text-white">
+                        {formatPrice(subtotal)}
+                      </strong>{" "}
+                      to the Opay account above.
+                    </span>
+                  </li>
+
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
+                      2
+                    </span>
+                    <span>
+                      Keep your transfer receipt or transaction
+                      confirmation.
+                    </span>
+                  </li>
+
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
+                      3
+                    </span>
+                    <span>
+                      Click the WhatsApp button below and send your
+                      payment confirmation to T&apos;s Farm.
+                    </span>
+                  </li>
+
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 font-bold text-black">
+                      4
+                    </span>
+                    <span>
+                      T&apos;s Farm will verify your payment and begin
+                      processing your order.
+                    </span>
+                  </li>
+                </ol>
+              </div>
+
+              {/* WhatsApp */}
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 px-6 py-4 font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+              >
+                <MessageCircle className="h-5 w-5" />
+                I&apos;ve Made Payment — Send Confirmation
+              </a>
+
+              <div className="text-center">
+                <Link
+                  href="/"
+                  className="text-sm font-medium text-gray-400 transition hover:text-white"
+                >
+                  Return to T&apos;s Farm
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * EMPTY CART
+   */
+  if (items.length === 0) {
+    return (
+      <main className="min-h-screen bg-[#07130d] text-white">
+        <div className="mx-auto flex min-h-screen max-w-2xl items-center justify-center px-5 py-10">
+          <div className="w-full rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center shadow-2xl sm:p-12">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-400/10">
+              <ShoppingBag className="h-9 w-9 text-amber-400" />
+            </div>
+
+            <h1 className="text-3xl font-bold">Your cart is empty</h1>
+
+            <p className="mx-auto mt-3 max-w-md text-gray-400">
+              Add some fresh products from T&apos;s Farm before proceeding
+              to checkout.
+            </p>
+
+            <Link
+              href="/"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-amber-400 px-6 py-3 font-bold text-black transition hover:bg-amber-300"
+            >
+              <ShoppingBag className="h-5 w-5" />
+              Shop Now
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#07130d] text-white">
+      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-10">
+          <Link
+            href="/cart"
+            className="mb-5 inline-flex items-center gap-2 text-sm text-gray-400 transition hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Cart
+          </Link>
+
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-400">
+            T&apos;s Farm
+          </p>
+
+          <h1 className="mt-2 text-3xl font-black sm:text-4xl">
+            Checkout
+          </h1>
+
+          <p className="mt-2 text-gray-400">
+            Enter your details and place your order.
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handlePlaceOrder}>
+          <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+            {/* Customer details */}
+            <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 sm:p-8">
+              <div className="mb-7">
+                <h2 className="text-xl font-bold">
+                  Customer Information
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Tell us where to deliver your order.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Full Name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Phone Number
+                  </label>
+
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="e.g. 08012345678"
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Email Address
+                  </label>
+
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Delivery Address
+                  </label>
+
+                  <textarea
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="Enter your full delivery address"
+                    rows={4}
+                    className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Delivery Notes{" "}
+                    <span className="text-gray-600">(Optional)</span>
+                  </label>
+
+                  <textarea
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    placeholder="Any special delivery instructions?"
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-gray-600 focus:border-amber-400/60"
                   />
                 </div>
               </div>
+            </section>
 
-              <div className="max-h-[520px] overflow-y-auto p-5">
-                <div className="space-y-4">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-2xl border border-white/10 bg-[#07140d] p-4"
-                    >
-                      <div className="flex gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#193b24] text-2xl">
-                          {item.emoji}
-                        </div>
+            {/* Order summary */}
+            <aside className="h-fit rounded-3xl border border-white/10 bg-white/[0.04] p-6 sm:p-8">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-xl font-bold">Your Order</h2>
 
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h3 className="text-sm font-semibold leading-5">
-                                {item.name}
-                              </h3>
+                <span className="rounded-full bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-400">
+                  {items.length} item{items.length !== 1 ? "s" : ""}
+                </span>
+              </div>
 
-                              <p className="mt-1 text-[10px] text-white/35">
-                                {formatPrice(item.price)} /{" "}
-                                {item.unit}
-                              </p>
-                            </div>
+              <div className="space-y-5">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="border-b border-white/10 pb-5"
+                  >
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-white">
+                          {item.name}
+                        </h3>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeItem(item.id)
-                              }
-                              className="text-white/25 transition hover:text-red-400"
-                              aria-label={`Remove ${item.name}`}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {formatPrice(item.price)} each
+                        </p>
 
-                          <div className="mt-4 flex items-center justify-between">
-                            <div className="flex items-center rounded-lg border border-white/10 bg-white/[0.03]">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  decreaseQuantity(
-                                    item.id
-                                  )
-                                }
-                                className="flex h-8 w-8 items-center justify-center text-white/50 transition hover:text-[#d6b45a]"
-                                aria-label="Decrease quantity"
-                              >
-                                <Minus size={13} />
-                              </button>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              decreaseQuantity(item.id)
+                            }
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-gray-300 transition hover:bg-white/10"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
 
-                              <span className="w-8 text-center text-xs font-semibold">
-                                {item.quantity}
-                              </span>
+                          <span className="min-w-8 text-center text-sm font-semibold">
+                            {item.quantity}
+                          </span>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  increaseQuantity(
-                                    item.id
-                                  )
-                                }
-                                className="flex h-8 w-8 items-center justify-center text-white/50 transition hover:text-[#d6b45a]"
-                                aria-label="Increase quantity"
-                              >
-                                <Plus size={13} />
-                              </button>
-                            </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              increaseQuantity(item.id)
+                            }
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-gray-300 transition hover:bg-white/10"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
 
-                            <p className="text-sm font-bold text-[#d6b45a]">
-                              {formatPrice(
-                                item.price *
-                                  item.quantity
-                              )}
-                            </p>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="ml-2 flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-red-500/10 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
+
+                      <p className="font-bold text-amber-400">
+                        {formatPrice(item.price * item.quantity)}
+                      </p>
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                  <span>Subtotal</span>
+                  <span>{formatPrice(subtotal)}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                  <span>Delivery</span>
+                  <span>To be confirmed</span>
+                </div>
+
+                <div className="my-4 h-px bg-white/10" />
+
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-bold">Total</span>
+
+                  <span className="text-2xl font-black text-amber-400">
+                    {formatPrice(subtotal)}
+                  </span>
                 </div>
               </div>
 
-              {/* TOTAL */}
-              <div className="border-t border-white/10 p-6">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-white/45">
-                      Subtotal
-                    </span>
+              <button
+                type="submit"
+                disabled={loading}
+                className="mt-7 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 px-6 py-4 font-bold text-black shadow-lg shadow-amber-400/10 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Placing Order...
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="h-5 w-5" />
+                    Place Order &amp; Pay via Opay
+                  </>
+                )}
+              </button>
 
-                    <span className="font-semibold">
-                      {formatPrice(subtotal)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-white/45">
-                      Delivery
-                    </span>
-
-                    <span className="text-xs text-white/35">
-                      To be confirmed
-                    </span>
-                  </div>
-
-                  <div className="border-t border-white/10 pt-4">
-                    <div className="flex items-end justify-between">
-                      <span className="font-semibold">
-                        Order Total
-                      </span>
-
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-[#d6b45a]">
-                          {formatPrice(subtotal)}
-                        </p>
-
-                        <p className="mt-1 text-[10px] text-white/30">
-                          Delivery charges may apply
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting || items.length === 0}
-                  className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#d6b45a] px-5 py-4 text-sm font-bold text-[#07140d] transition hover:bg-[#e5c874] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2
-                        size={18}
-                        className="animate-spin"
-                      />
-                      Placing Order...
-                    </>
-                  ) : (
-                    <>
-                      Place Order
-                      <ChevronRight size={18} />
-                    </>
-                  )}
-                </button>
-
-                <p className="mt-4 text-center text-[10px] leading-4 text-white/30">
-                  By placing your order, you confirm that
-                  the customer and delivery information
-                  provided is correct.
-                </p>
-              </div>
-            </div>
-          </aside>
+              <p className="mt-4 text-center text-xs leading-5 text-gray-600">
+                Your order will be saved first. You will then receive
+                the Opay payment instructions.
+              </p>
+            </aside>
+          </div>
         </form>
-      </section>
-
-      {/* FOOTER */}
-      <footer className="border-t border-white/10 bg-[#050d08]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-7 text-xs text-white/30 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <p>
-            © {new Date().getFullYear()} T&apos;s Farm. All
-            rights reserved.
-          </p>
-
-          <a
-            href="tel:09169534809"
-            className="transition hover:text-[#d6b45a]"
-          >
-            09169534809
-          </a>
-        </div>
-      </footer>
+      </div>
     </main>
-  );
-}
-
-function TruckIcon() {
-  return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d6b45a]/10 text-[#d6b45a]">
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M3 7h11v10H3z" />
-        <path d="M14 10h4l3 3v4h-7z" />
-        <circle cx="7" cy="19" r="2" />
-        <circle cx="18" cy="19" r="2" />
-      </svg>
-    </div>
   );
 }
